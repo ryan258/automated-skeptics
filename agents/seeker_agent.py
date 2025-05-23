@@ -257,20 +257,129 @@ class SeekerAgent:
         return sources
     
     def _extract_search_terms(self, query: str) -> List[str]:
-        """Extract key search terms from query"""
-        # Simple extraction - can be enhanced
+        """Extract key search terms from query - ENHANCED VERSION"""
         import re
         
-        # Remove common words
-        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'was', 'were', 'is', 'are'}
+        self.logger.info(f"[SEARCH] Original query: '{query}'")
         
-        words = re.findall(r'\b\w+\b', query.lower())
-        key_terms = [word for word in words if word not in stop_words and len(word) > 2]
+        # Extract proper nouns with better patterns
+        # Multi-word proper nouns (e.g., "Berlin Wall", "East Germany")
+        multiword_nouns = re.findall(r'\b[A-Z][a-z]+(?:\s+(?:and\s+)?[A-Z][a-z]+)+\b', query)
         
-        # Also include full query
-        terms = [query] + key_terms
+        # Single proper nouns (but filter out common words)
+        single_nouns = re.findall(r'\b[A-Z][a-z]{2,}\b', query)  # At least 3 chars
+        common_words = {'The', 'This', 'That', 'There', 'Then', 'They', 'Their', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October'}
+        single_nouns = [noun for noun in single_nouns if noun not in common_words]
         
-        return terms
+        # Extract years - FIXED PATTERN
+        years = re.findall(r'\b(19|20)\d{2}\b', query)
+        
+        # Extract specific date patterns
+        dates = re.findall(r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+(19|20)\d{2}\b', query)
+        
+        # Extract geographic entities
+        countries = re.findall(r'\b(?:Germany|America|United States|China|Russia|France|England|Britain|Japan|Italy|Spain|Canada|Australia)\b', query, re.IGNORECASE)
+        
+        # SPECIAL HANDLING for common historical entities
+        historical_entities = []
+        
+        # Berlin Wall variations
+        if re.search(r'\b(?:berlin\s+wall|wall.*berlin)\b', query, re.IGNORECASE):
+            historical_entities.append("Berlin Wall")
+        elif 'wall' in query.lower() and any(term in query.lower() for term in ['berlin', 'east', 'west', 'germany']):
+            historical_entities.append("Berlin Wall")
+        
+        # Company names
+        if re.search(r'\bapple\b', query, re.IGNORECASE) and any(term in query.lower() for term in ['founded', 'company', 'computer']):
+            historical_entities.append("Apple Inc")
+        
+        # Remove problematic action words
+        problematic_words = {
+            'fell', 'falling', 'fall', 'falls',
+            'opened', 'opening', 'open', 'opens',
+            'founded', 'founding', 'found',
+            'born', 'birth', 'births',
+            'died', 'death', 'deaths',
+            'became', 'become',
+            'created', 'create', 'creation',
+            'allowed', 'allowing', 'allow'
+        }
+        
+        # Extract clean keywords (backup)
+        words = re.findall(r'\b\w{3,}\b', query.lower())  # At least 3 chars
+        stop_words = {
+            'the', 'and', 'was', 'were', 'that', 'this', 'with', 'for', 'from', 'they', 'have', 'been'
+        }
+        
+        clean_words = [
+            word for word in words 
+            if word not in problematic_words 
+            and word not in stop_words 
+            and not word.isdigit()
+        ]
+        
+        # Build prioritized search terms
+        search_terms = []
+        
+        # 1. HIGHEST PRIORITY: Historical entities we specifically identified
+        search_terms.extend(historical_entities)
+        
+        # 2. HIGH PRIORITY: Multi-word proper nouns
+        search_terms.extend(multiword_nouns)
+        
+        # 3. IMPORTANT: Single proper nouns (filtered)
+        search_terms.extend(single_nouns)
+        
+        # 4. DATES: Full years
+        search_terms.extend(years)
+        
+        # 5. GEOGRAPHIC: Countries
+        search_terms.extend(countries)
+        
+        # 6. BACKUP: Best clean keywords (limited)
+        search_terms.extend(clean_words[:2])
+        
+        # 7. COMPOUND TERMS: Create intelligent combinations
+        if len(single_nouns) >= 2:
+            # Combine related proper nouns
+            search_terms.append(" ".join(single_nouns[:2]))
+        
+        # Remove duplicates and empty terms
+        seen = set()
+        final_terms = []
+        for term in search_terms:
+            term_clean = term.strip()
+            term_lower = term_clean.lower()
+            if term_clean and term_lower not in seen and len(term_clean) > 1:
+                seen.add(term_lower)
+                final_terms.append(term_clean)
+        
+        # Limit to top 5 terms
+        final_terms = final_terms[:5]
+        
+        # FALLBACK: If we have poor terms, extract from original query
+        if not final_terms or all(len(term) < 3 for term in final_terms):
+            # Extract the most important words from original query
+            important_words = []
+            for word in query.split():
+                clean_word = re.sub(r'[^\w]', '', word)
+                if len(clean_word) > 3 and clean_word.lower() not in problematic_words:
+                    important_words.append(clean_word)
+            
+            if important_words:
+                final_terms = important_words[:3]
+            else:
+                final_terms = [query.replace('.', '').strip()]
+        
+        # Debug logging
+        self.logger.info(f"[SEARCH] Extracted search terms: {final_terms}")
+        self.logger.info(f"[SEARCH] Multi-word nouns: {multiword_nouns}")
+        self.logger.info(f"[SEARCH] Single nouns: {single_nouns}")
+        self.logger.info(f"[SEARCH] Years found: {years}")
+        self.logger.info(f"[SEARCH] Historical entities: {historical_entities}")
+        
+        return final_terms
+
     
     def _calculate_relevance(self, query: str, content: str) -> float:
         """Calculate relevance score between query and content"""

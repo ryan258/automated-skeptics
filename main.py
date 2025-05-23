@@ -18,12 +18,18 @@ from data.models import Claim, VerificationResult
 from config.settings import Settings
 
 def setup_logging():
-    """Configure logging for the application"""
+    """Configure UTF-8 logging for Windows"""
+    # Force UTF-8 encoding for logging
+    if sys.platform == "win32":
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('automated_skeptic.log'),
+            logging.FileHandler('automated_skeptic.log', encoding='utf-8'),
             logging.StreamHandler(sys.stdout)
         ]
     )
