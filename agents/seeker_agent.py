@@ -65,13 +65,18 @@ class SeekerAgent:
             Claim with sources populated
         """
         try:
+            self.logger.info(f"[SEEKER] Starting research for claim with {len(claim.sub_claims)} sub-claims")
             all_sources = []
             
             # Research each sub-claim
-            for sub_claim in claim.sub_claims:
+            for i, sub_claim in enumerate(claim.sub_claims):
+                self.logger.info(f"[SEEKER] Processing sub-claim {i+1}: '{sub_claim.text[:50]}...'")
                 if sub_claim.verifiable:
                     sources = self._research_sub_claim(sub_claim)
                     all_sources.extend(sources)
+                    self.logger.info(f"[SEEKER] Sub-claim {i+1} found {len(sources)} sources")
+                else:
+                    self.logger.info(f"[SEEKER] Sub-claim {i+1} marked as not verifiable")
             
             # Remove duplicates and limit to max sources
             unique_sources = self._deduplicate_sources(all_sources)
@@ -93,51 +98,80 @@ class SeekerAgent:
     
     def _research_sub_claim(self, sub_claim: SubClaim) -> List[Source]:
         """Research a specific sub-claim"""
+        self.logger.info(f"[RESEARCH] Starting research for: '{sub_claim.text}'")
         sources = []
         
         # 1. Wikipedia API
-        wikipedia_sources = self._search_wikipedia(sub_claim.text)
-        sources.extend(wikipedia_sources)
+        self.logger.info(f"[RESEARCH] Searching Wikipedia...")
+        try:
+            wikipedia_sources = self._search_wikipedia(sub_claim.text)
+            sources.extend(wikipedia_sources)
+            self.logger.info(f"[RESEARCH] Wikipedia returned {len(wikipedia_sources)} sources")
+        except Exception as e:
+            self.logger.error(f"[RESEARCH] Wikipedia search failed: {str(e)}")
         
         # 2. NewsAPI (if available)
         if self.news_api_key:
-            news_sources = self._search_news(sub_claim.text)
-            sources.extend(news_sources)
+            self.logger.info(f"[RESEARCH] Searching NewsAPI...")
+            try:
+                news_sources = self._search_news(sub_claim.text)
+                sources.extend(news_sources)
+                self.logger.info(f"[RESEARCH] NewsAPI returned {len(news_sources)} sources")
+            except Exception as e:
+                self.logger.error(f"[RESEARCH] NewsAPI search failed: {str(e)}")
+        else:
+            self.logger.info(f"[RESEARCH] NewsAPI key not available")
         
         # 3. Google Search API (if available)
         if self.google_api_key and self.google_engine_id:
-            google_sources = self._search_google(sub_claim.text)
-            sources.extend(google_sources)
+            self.logger.info(f"[RESEARCH] Searching Google...")
+            try:
+                google_sources = self._search_google(sub_claim.text)
+                sources.extend(google_sources)
+                self.logger.info(f"[RESEARCH] Google returned {len(google_sources)} sources")
+            except Exception as e:
+                self.logger.error(f"[RESEARCH] Google search failed: {str(e)}")
+        else:
+            self.logger.info(f"[RESEARCH] Google API not configured")
         
         # Rate limiting
         time.sleep(self.rate_limit_delay)
         
+        self.logger.info(f"[RESEARCH] Total sources found: {len(sources)}")
         return sources
     
     def _search_wikipedia(self, query: str) -> List[Source]:
         """Search Wikipedia API with FIXED search term extraction and debug logging"""
+        self.logger.info(f"[WIKIPEDIA] Starting Wikipedia search for: '{query}'")
         sources = []
         
         try:
             # Check cache first
             cached_result = self._get_cached_result(query, 'wikipedia')
             if cached_result:
+                self.logger.info(f"[WIKIPEDIA] Found cached result")
                 return self._parse_wikipedia_response(cached_result)
             
             # Wikipedia search API
             search_url = "https://en.wikipedia.org/api/rest_v1/page/summary/"
             
             # Use fixed search term extraction
+            self.logger.info(f"[WIKIPEDIA] Extracting search terms...")
             search_terms = self._extract_search_terms(query)
             self.logger.info(f"[WIKIPEDIA] Search terms for '{query}': {search_terms}")
             
-            for term in search_terms[:3]:  # Limit to top 3 terms
+            if not search_terms:
+                self.logger.warning(f"[WIKIPEDIA] No search terms extracted from query")
+                return sources
+            
+            for i, term in enumerate(search_terms[:3]):  # Limit to top 3 terms
+                self.logger.info(f"[WIKIPEDIA] Processing term {i+1}/3: '{term}'")
                 try:
                     url = search_url + term.replace(' ', '_')
-                    self.logger.info(f"[WIKIPEDIA] Searching: {url}")
-                    response = requests.get(url, timeout=self.request_timeout)
+                    self.logger.info(f"[WIKIPEDIA] Requesting URL: {url}")
                     
-                    self.logger.info(f"[WIKIPEDIA] Response: {response.status_code}")
+                    response = requests.get(url, timeout=self.request_timeout)
+                    self.logger.info(f"[WIKIPEDIA] Response status: {response.status_code}")
                     
                     if response.status_code == 200:
                         data = response.json()
@@ -145,7 +179,7 @@ class SeekerAgent:
                         title = data.get('title', '')
                         page_url = data.get('content_urls', {}).get('desktop', {}).get('page', '')
                         
-                        self.logger.info(f"[WIKIPEDIA] Found: {title} ({len(extract)} chars)")
+                        self.logger.info(f"[WIKIPEDIA] Found page: {title} ({len(extract)} chars)")
                         
                         if extract and title:  # Only add if we have content
                             source = Source(
@@ -163,16 +197,19 @@ class SeekerAgent:
                             # Cache the result
                             self._cache_result(query, 'wikipedia', response.text)
                         else:
-                            self.logger.warning(f"[WIKIPEDIA] Empty content for {term}")
+                            self.logger.warning(f"[WIKIPEDIA] Empty content for term '{term}' - title: '{title}', extract length: {len(extract)}")
                     else:
-                        self.logger.warning(f"[WIKIPEDIA] Failed: {response.status_code} for {term}")
+                        self.logger.warning(f"[WIKIPEDIA] HTTP {response.status_code} for term '{term}' - Response: {response.text[:200]}")
                         
                 except requests.RequestException as e:
-                    self.logger.warning(f"Wikipedia API error for term '{term}': {str(e)}")
+                    self.logger.warning(f"[WIKIPEDIA] Network error for term '{term}': {str(e)}")
+                    continue
+                except Exception as e:
+                    self.logger.error(f"[WIKIPEDIA] Unexpected error for term '{term}': {str(e)}")
                     continue
                 
         except Exception as e:
-            self.logger.error(f"Wikipedia search error: {str(e)}")
+            self.logger.error(f"[WIKIPEDIA] Search error: {str(e)}")
         
         self.logger.info(f"[WIKIPEDIA] Total sources found: {len(sources)}")
         return sources
@@ -480,7 +517,28 @@ class SeekerAgent:
     
     def _parse_wikipedia_response(self, response_data: str) -> List[Source]:
         """Parse cached Wikipedia response"""
-        return []
+        sources = []
+        try:
+            data = json.loads(response_data)
+            extract = data.get('extract', '')
+            title = data.get('title', '')
+            page_url = data.get('content_urls', {}).get('desktop', {}).get('page', '')
+            
+            if extract and title:
+                source = Source(
+                    url=page_url,
+                    title=title,
+                    content=extract,
+                    source_type='wikipedia',
+                    credibility_score=0.9,
+                    relevance_score=0.8
+                )
+                sources.append(source)
+                self.logger.info(f"[WIKIPEDIA] Parsed cached source: {title}")
+        except Exception as e:
+            self.logger.error(f"[WIKIPEDIA] Cache parse error: {str(e)}")
+        
+        return sources
     
     def _parse_news_response(self, response_data: str) -> List[Source]:
         """Parse cached NewsAPI response"""
