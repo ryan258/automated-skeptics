@@ -1,6 +1,7 @@
 # automated_skeptic_mvp/data/models.py
 """
 Core data models for the Automated Skeptic MVP
+FIXED: Added missing metadata field to Evidence class
 """
 
 from dataclasses import dataclass, field
@@ -59,6 +60,7 @@ class Evidence:
     supports_claim: bool
     confidence: float
     extraction_method: str = "manual"
+    metadata: Optional[Dict[str, Any]] = None  # FIXED: Added missing metadata field
 
 @dataclass
 class Claim:
