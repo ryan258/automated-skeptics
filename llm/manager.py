@@ -9,6 +9,19 @@ from .base import BaseLLMProvider, LLMMessage, LLMResponse, LLMConfig, LLMProvid
 from .providers.openai_provider import OpenAIProvider
 from .providers.ollama_provider import OllamaProvider
 
+# Import new providers with fallback
+try:
+    from .providers.claude_provider import ClaudeProvider
+    CLAUDE_AVAILABLE = True
+except ImportError:
+    CLAUDE_AVAILABLE = False
+
+try:
+    from .providers.gemini_provider import GeminiProvider
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 class LLMManager:
     """Manages multiple LLM providers and routes requests"""
     
@@ -43,10 +56,32 @@ class LLMManager:
         if openai_key:
             configs['openai_default'] = LLMConfig(
                 provider=LLMProvider.OPENAI,
-                model=self.settings.get('LLM_MODELS', 'openai_model', 'gpt-3.5-turbo'),
+                model=self.settings.get('LLM_MODELS', 'openai_model', 'gpt-4o-mini'),
                 api_key=openai_key,
                 temperature=self.settings.getfloat('LLM_MODELS', 'openai_temperature', 0.1),
                 max_tokens=self.settings.getint('LLM_MODELS', 'openai_max_tokens', 500)
+            )
+        
+        # Claude/Anthropic configuration
+        claude_key = self.settings.get('API_KEYS', 'anthropic_api_key')
+        if claude_key and CLAUDE_AVAILABLE:
+            configs['claude_default'] = LLMConfig(
+                provider=LLMProvider.ANTHROPIC,
+                model=self.settings.get('LLM_MODELS', 'claude_model', 'claude-3-5-sonnet-20241022'),
+                api_key=claude_key,
+                temperature=self.settings.getfloat('LLM_MODELS', 'claude_temperature', 0.1),
+                max_tokens=self.settings.getint('LLM_MODELS', 'claude_max_tokens', 500)
+            )
+        
+        # Gemini/Google AI configuration
+        gemini_key = self.settings.get('API_KEYS', 'google_ai_api_key')
+        if gemini_key and GEMINI_AVAILABLE:
+            configs['gemini_default'] = LLMConfig(
+                provider=LLMProvider.GOOGLE,
+                model=self.settings.get('LLM_MODELS', 'gemini_model', 'gemini-1.5-flash'),
+                api_key=gemini_key,
+                temperature=self.settings.getfloat('LLM_MODELS', 'gemini_temperature', 0.1),
+                max_tokens=self.settings.getint('LLM_MODELS', 'gemini_max_tokens', 500)
             )
         
         # Ollama configuration
@@ -85,9 +120,12 @@ class LLMManager:
             return OpenAIProvider(config)
         elif config.provider == LLMProvider.OLLAMA:
             return OllamaProvider(config)
-        # Add more providers here as needed
+        elif config.provider == LLMProvider.ANTHROPIC and CLAUDE_AVAILABLE:
+            return ClaudeProvider(config)
+        elif config.provider == LLMProvider.GOOGLE and GEMINI_AVAILABLE:
+            return GeminiProvider(config)
         else:
-            self.logger.error(f"Unsupported provider: {config.provider}")
+            self.logger.error(f"Unsupported or unavailable provider: {config.provider}")
             return None
     
     def generate(
@@ -134,7 +172,13 @@ class LLMManager:
                 return self.providers[agent_provider_name]
         
         # 3. Use default providers in order of preference
-        preference_order = ['ollama_default', 'openai_default']
+        preference_order = [
+            'ollama_default',    # Local first (free)
+            'claude_default',    # High quality
+            'gemini_default',    # Good balance
+            'openai_default'     # Reliable fallback
+        ]
+        
         for provider_name in preference_order:
             if provider_name in self.providers:
                 return self.providers[provider_name]
@@ -143,13 +187,20 @@ class LLMManager:
     
     def _get_fallback_provider(self, failed_provider: BaseLLMProvider) -> Optional[BaseLLMProvider]:
         """Get fallback provider when primary fails"""
-        # If OpenAI fails, try Ollama
-        if failed_provider.config.provider == LLMProvider.OPENAI:
-            return self.providers.get('ollama_default')
+        # Fallback priority: Local -> External providers
+        fallback_order = [
+            ('ollama_default', LLMProvider.OLLAMA),
+            ('claude_default', LLMProvider.ANTHROPIC), 
+            ('gemini_default', LLMProvider.GOOGLE),
+            ('openai_default', LLMProvider.OPENAI)
+        ]
         
-        # If Ollama fails, try OpenAI
-        elif failed_provider.config.provider == LLMProvider.OLLAMA:
-            return self.providers.get('openai_default')
+        # Don't try the same provider that just failed
+        failed_provider_type = failed_provider.config.provider
+        
+        for provider_name, provider_type in fallback_order:
+            if provider_type != failed_provider_type and provider_name in self.providers:
+                return self.providers[provider_name]
         
         return None
     
@@ -172,7 +223,7 @@ class LLMManager:
             return agent_provider_name
         
         # Return default if no specific mapping
-        for provider_name in ['ollama_default', 'openai_default']:
+        for provider_name in ['ollama_default', 'claude_default', 'gemini_default', 'openai_default']:
             if provider_name in self.providers:
                 return provider_name
         
@@ -185,11 +236,37 @@ class LLMManager:
         
         if provider_name and provider_name in self.providers:
             provider = self.providers[provider_name]
-            if provider.config.provider == LLMProvider.OPENAI:
-                # Use OpenAI pricing
-                return (estimated_tokens / 1000) * 0.002  # Rough estimate
-            else:
-                # Local models are essentially free
-                return 0.0
+            
+            # Cost per 1k tokens (rough estimates)
+            cost_rates = {
+                LLMProvider.OPENAI: 0.002,      # GPT-4o-mini average
+                LLMProvider.ANTHROPIC: 0.009,   # Claude average
+                LLMProvider.GOOGLE: 0.0007,     # Gemini average
+                LLMProvider.OLLAMA: 0.0,        # Local is free
+            }
+            
+            rate = cost_rates.get(provider.config.provider, 0.001)
+            return (estimated_tokens / 1000) * rate
         
         return 0.0  # Default to free if unknown
+    
+    def get_provider_summary(self) -> str:
+        """Get a human-readable summary of available providers"""
+        providers = self.get_available_providers()
+        
+        if not providers:
+            return "❌ No LLM providers available"
+        
+        summary = f"✅ {len(providers)} LLM providers available:\n"
+        
+        provider_types = {}
+        for name, info in providers.items():
+            provider_type = info['provider']
+            if provider_type not in provider_types:
+                provider_types[provider_type] = []
+            provider_types[provider_type].append(f"{name} ({info['model']})")
+        
+        for provider_type, instances in provider_types.items():
+            summary += f"  • {provider_type.upper()}: {', '.join(instances)}\n"
+        
+        return summary.strip()

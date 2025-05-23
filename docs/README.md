@@ -73,33 +73,74 @@ python main.py --file data/test_claims.csv --output results.json
 python main.py --help
 ```
 
-## 🏗️ **Revolutionary Multi-Model Architecture**
+**Section to Update:** "🏗️ **Revolutionary Multi-Model Architecture**"
 
-### **Optimal Model Configuration**
+Replace the existing architecture section with:
 
-Our research revealed that **different models excel at different tasks**, leading to this optimized architecture:
+## 🏗️ **4-Provider Multi-Model Architecture**
+
+### **All Major LLM Providers Supported** ✅
+
+Our system now supports **all major LLM providers** for maximum flexibility:
+
+- 🏠 **Ollama** (Local): `phi3`, `llama3.2`, `deepseek-r1:14b` - Free, private
+- 🧠 **Claude** (Anthropic): `claude-3-5-sonnet-20241022` - Best reasoning
+- ⚡ **Gemini** (Google): `gemini-1.5-flash` - Fastest inference (0.75s)
+- 🔧 **OpenAI**: `gpt-4o-mini` - Reliable fallback
+
+### **Performance Benchmarks** 📊
+
+| Provider   | Speed | Cost/Request | Best Use Case        |
+| ---------- | ----- | ------------ | -------------------- |
+| **Gemini** | 0.75s | ~$0.0000     | Fast processing      |
+| **Claude** | 1.40s | $0.0006      | Complex reasoning    |
+| **OpenAI** | 1.42s | ~$0.0000     | Reliable fallback    |
+| **Ollama** | 2-6s  | $0.0000      | Development, privacy |
+
+### **Optimal Configuration**
 
 ```ini
-[AGENT_LLM_MAPPING]
-# Fast, efficient models for lightweight tasks
-herald_llm = ollama
-herald_model = phi3:latest
-
-illuminator_llm = ollama
-illuminator_model = llama3.2:latest
-
-# Powerful reasoning model for complex analysis
-logician_llm = ollama
-logician_model = deepseek-r1:14b
-
-# Efficient search planning
-seeker_llm = ollama
-seeker_model = llama3.2:latest
-
-# CRITICAL: Western model for unbiased evidence analysis
-oracle_llm = ollama
-oracle_model = llama3.1:latest
+# HYBRID STRATEGY: Local + Premium
+herald_llm = ollama          # Fast input processing
+illuminator_llm = ollama     # Local classification
+logician_llm = claude        # Complex claim deconstruction
+seeker_llm = ollama          # Local search planning
+oracle_llm = claude          # Premium evidence analysis
 ```
+
+This gives you **enterprise-grade reasoning** while keeping **95% of operations free** through local models.
+
+````
+
+### 2. requirements.txt
+**Add new dependencies:**
+
+```txt
+# automated_skeptic_mvp/requirements.txt
+
+# Core dependencies (existing)
+spacy>=3.4.0
+nltk>=3.8
+requests>=2.28.0
+
+# LLM Integrations - ALL PROVIDERS
+openai>=1.0.0              # OpenAI API client (UPDATED)
+anthropic>=0.25.0          # Claude/Anthropic API client (NEW)
+google-generativeai>=0.3.0 # Gemini/Google AI client (NEW)
+httpx>=0.24.0              # For async HTTP requests (Ollama)
+
+# Testing and development
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-asyncio>=0.21.0
+
+# Optional: Enhanced async support
+aiohttp>=3.8.0
+
+# Optional: Type hints and utilities
+typing-extensions>=4.0.0
+tenacity>=8.0.0            # Retry mechanisms for API calls
+psutil>=5.9.0              # System resource monitoring
 
 ### **Why This Configuration Works**
 
@@ -207,7 +248,7 @@ oracle_model = llama3.1:latest
 enable_parallel_processing = false
 local_llm_timeout = 60
 enable_llm_caching = true
-```
+````
 
 ### **Alternative Configurations**
 

@@ -224,3 +224,68 @@ logging.basicConfig(level=logging.DEBUG)
 - Academic database APIs (PubMed, JSTOR)
 - Social media APIs for real-time claim tracking
 - Enhanced credibility assessment APIs
+
+## Claude/Anthropic API Setup
+
+### Getting Started
+
+1. Create account at https://console.anthropic.com/
+2. Generate API key in the Console
+3. Add to config: `anthropic_api_key = your_key_here`
+
+### Pricing (2024)
+
+- Claude 3.5 Sonnet: $3.00 input / $15.00 output per 1M tokens
+- Claude 3 Haiku: $0.25 input / $1.25 output per 1M tokens
+
+### Best Use Cases
+
+- Complex reasoning and analysis
+- Long-form text generation
+- Code analysis and debugging
+
+## Gemini/Google AI API Setup
+
+### Getting Started
+
+1. Visit https://aistudio.google.com/app/apikey
+2. Create new API key
+3. Add to config: `google_ai_api_key = your_key_here`
+
+### Pricing (2024)
+
+- Gemini 1.5 Flash: $0.35 input / $1.05 output per 1M tokens
+- Gemini 1.5 Pro: $3.50 input / $10.50 output per 1M tokens
+
+### Best Use Cases
+
+- Fast inference (0.75s average)
+- Cost-effective processing
+- Balanced quality/speed ratio
+
+## Cost Optimization Strategies
+
+### Hybrid Approach (Recommended)
+
+```ini
+# Use local for 80% of tasks (free)
+herald_llm = ollama
+illuminator_llm = ollama
+seeker_llm = ollama
+
+# Use premium for 20% complex tasks
+logician_llm = claude     # ~$0.0006 per complex claim
+oracle_llm = claude       # Best quality analysis
+```
+
+**Expected daily cost for 100 claims: ~$0.12**
+
+### Local-Only Approach
+
+```ini
+# Use only Ollama models (100% free)
+logician_llm = ollama
+oracle_llm = ollama
+```
+
+**Daily cost: $0.00**

@@ -7,6 +7,8 @@ requests>=2.28.0
 
 # LLM Integrations
 openai>=1.0.0              # OpenAI API client
+anthropic>=0.25.0          # NEW
+google-generativeai>=0.3.0 # NEW
 httpx>=0.24.0              # For async HTTP requests
 
 # Testing and development
