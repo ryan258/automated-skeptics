@@ -289,3 +289,4 @@ oracle_llm = ollama
 ```
 
 **Daily cost: $0.00**
+Because I'm trying to remember like 6 things I want since hard for me to keep it straight Because as soon as I break that it's like gone that's aligned this belly and I hate being reminded of it just as much as I listen
